@@ -1,15 +1,21 @@
 // NOTE (intentional bug for DeployMind):
-// This file imports `lodash`, but `lodash` is NOT listed in package.json.
-// On Vercel the build fails with: "Module not found: Can't resolve 'lodash'".
-// The correct fix is to add "lodash" to dependencies in package.json.
-import { capitalize } from "lodash";
+// This renders `user.name`, but the User type in lib/users.ts has no `name`
+// field (only `id` and `email`). On Vercel the strict TypeScript build fails:
+//   Type error: Property 'name' does not exist on type 'User'.
+// Fixing it correctly requires reading lib/users.ts to see the real fields,
+// then either using `user.email` here, or adding a `name` field to the type
+// and the data. This is a cross-file fix, not a one-line guess.
+import { users } from "@/lib/users";
 
 export default function Home() {
-  const title = capitalize("hello from the deploymind test app");
   return (
     <main style={{ padding: 32, fontFamily: "system-ui, sans-serif" }}>
-      <h1>{title}</h1>
-      <p>If you can read this in production, the deployment succeeded.</p>
+      <h1>Team</h1>
+      <ul>
+        {users.map((user) => (
+          <li key={user.id}>{user.name}</li>
+        ))}
+      </ul>
     </main>
   );
 }

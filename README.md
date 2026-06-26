@@ -3,42 +3,47 @@
 A minimal Next.js (App Router) app that is **intentionally broken** so you can
 test the DeployMind self-healing pipeline end-to-end.
 
-## The intentional bug
+## The intentional bug (cross-file type error)
 
-`app/page.tsx` imports `lodash`:
+`app/page.tsx` renders `user.name`:
 
-```ts
-import { capitalize } from "lodash";
+```tsx
+import { users } from "@/lib/users";
+// ...
+<li key={user.id}>{user.name}</li>
 ```
 
-…but `lodash` is **not** in `package.json` dependencies. A Vercel build will
-fail with:
+…but the `User` type in `lib/users.ts` only declares `id` and `email` — there is
+no `name` field. A strict TypeScript build (`"strict": true`) fails with:
 
 ```
-Module not found: Can't resolve 'lodash'
+Type error: Property 'name' does not exist on type 'User'.
 ```
+
+The root cause lives in a **different file** (`lib/users.ts`) than where the
+error surfaces (`app/page.tsx`).
 
 ## Expected DeployMind behavior
 
-1. **Repo analysis** → detects Next.js + npm, reads `package.json`.
-2. **Log analysis** → root cause: `lodash` imported but missing from dependencies.
-3. **Fix generation** → add `"lodash": "^4.17.21"` to `package.json` dependencies.
-4. **Validation** → low risk, single config file.
+1. **Repo analysis** → detects Next.js + TypeScript + npm, notes `@/` path alias.
+2. **Log analysis** → "Property 'name' does not exist on type 'User'", requests
+   BOTH `app/page.tsx` and `lib/users.ts` (the investigation loop in action).
+3. **Fix generation** → either:
+   - change `user.name` → `user.email` in `app/page.tsx`, OR
+   - add `name: string` to the `User` interface AND to each entry in `users`.
+4. **Validation** → source-code change → flagged for human approval.
 5. **Apply** → opens a PR with the fix and redeploys.
 
 ## Use it
 
-1. Create an empty GitHub repo and push this folder to it.
-2. Import the repo into Vercel and deploy → the build fails (expected).
-3. Copy the failed deployment ID (`dpl_...`).
-4. Point DeployMind at it:
+1. Push this folder to a GitHub repo.
+2. Import into Vercel and deploy → the build fails (expected).
+3. Point DeployMind at it (it can auto-discover the latest failed deployment):
    ```bash
    cd my_agent
-   # set GITHUB_OWNER / GITHUB_REPO in .env for this repo, then:
-   python agent.py dpl_THE_FAILED_ID
+   python agent.py            # auto-finds the failed deployment
    ```
 
 ## Reset for another demo
 
-To break it again after a fix, remove `lodash` from `package.json` (or revert
-the DeployMind PR) and redeploy.
+Revert the DeployMind PR (or restore `user.name`) and redeploy to break it again.
